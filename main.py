@@ -269,9 +269,10 @@ for sheet in nombres_hojas_normalizados:
             #print(tabla_limpia)
             #tabla_limpia2
             start_row += resultado[1] + 1
-# xls2 = pd.ExcelFile(last_file)
-# # Eliminar la última fila
-# xls2 = xls2.drop(df.index[-1])
+            last_file = f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
+xls2 = pd.ExcelFile(last_file)
+# Eliminar la última fila
+xls2 = xls2.drop(df.index[-1])
 
 #%% MAIN testeo individual
 import math

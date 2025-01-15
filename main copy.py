@@ -26,14 +26,33 @@ def get_value_from_position(df, row_idx, col_idx):
 def extract_rectangle(df, start_row, start_col, end_row, end_col):
     """
     Extrae un rectángulo de un DataFrame dado las coordenadas de inicio y final.
+    
+    Parámetros:
+    - df (pd.DataFrame): El DataFrame original.
+    - start_row (int): Índice de la fila de inicio.
+    - start_col (int): Índice de la columna de inicio.
+    - end_row (int): Índice de la fila final.
+    - end_col (int): Índice de la columna final.
+    
+    Retorna:
+    - pd.DataFrame: Un nuevo DataFrame que contiene el rectángulo de celdas extraído.
+    
+    Excepciones:
+    - ValueError: Si las coordenadas están fuera de rango o son inconsistentes.
     """
-    # Validar límites y que las coordenadas sean consistentes
-    if (
-        start_row < 0 or start_col < 0 or 
-        end_row < start_row or end_col < start_col or
-        end_row >= df.shape[0] or end_col >= df.shape[1]
-    ):
-        raise ValueError("Coordenadas fuera de rango o inconsistentes")
+    # Validar límites
+    if start_row < 0:
+        raise ValueError(f"start_row ({start_row}) está fuera de los límites (debe ser >= 0).")
+    if start_col < 0:
+        raise ValueError(f"start_col ({start_col}) está fuera de los límites (debe ser >= 0).")
+    if end_row >= df.shape[0]:
+        raise ValueError(f"end_row ({end_row}) excede el límite de filas del DataFrame ({df.shape[0] - 1}).")
+    if end_col >= df.shape[1]:
+        raise ValueError(f"end_col ({end_col}) excede el límite de columnas del DataFrame ({df.shape[1] - 1}).")
+    if end_row < start_row:
+        raise ValueError(f"end_row ({end_row}) es menor que start_row ({start_row}), lo que es inconsistente.")
+    if end_col < start_col:
+        raise ValueError(f"end_col ({end_col}) es menor que start_col ({start_col}), lo que es inconsistente.")
     
     # Extraer el bloque rectangular
     rectangle_df = df.iloc[start_row:end_row + 1, start_col:end_col + 1]
@@ -114,6 +133,10 @@ def quitar_tildes(texto):
         str: El texto sin tildes.
     """
     # Diccionario con las letras acentuadas y sus equivalentes sin acento
+    if not isinstance(texto, str):
+        raise TypeError(f"Se esperaba una cadena, pero se recibió {type(texto).__name__}")
+  
+    
     acentos = {
         'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
         'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U'
@@ -133,11 +156,13 @@ def obtener_texto_y_filas_hasta_seccion(df, col_idx, start_row=0):
         start_row (int, opcional): La fila en la que empezar a leer (default es 0).
         
     Returns:
-        list: Un arreglo con el texto que empieza con 'SECCIÓN' y el número de filas leídas hasta esa sección.
+        list: Un arreglo con el texto que empieza con 'SECCIÓN', el número de filas leídas hasta esa sección, un booleano indicando si es el titulo de una subseccion o no.
     """
     fila_contada = 0
     texto_seccion = None
-    
+    isSubSeccion = False
+    row = None  # Inicializar la variable para usarla después del bucle
+
     # Iterar por todas las filas de la columna desde la fila de inicio
     for row in df.iloc[start_row:, col_idx]:
         # Verificar si la fila es un texto que empieza con 'SECCIÓN'
@@ -146,8 +171,15 @@ def obtener_texto_y_filas_hasta_seccion(df, col_idx, start_row=0):
             break
         
         fila_contada += 1
-    
-    return [texto_seccion, fila_contada]
+
+    # Verificar si es una subsección en base al valor de la última fila procesada
+    if fila_contada == 0 and row is not None and isinstance(row, str) and quitar_tildes(row).lower().startswith('seccion'):
+        isSubSeccion = True
+        return [texto_seccion, fila_contada, isSubSeccion]
+    elif row is not None:
+        return [texto_seccion, fila_contada, isSubSeccion]
+    else:
+        return ["ESTO ES EL FIN", fila_contada, isSubSeccion]
 
 def normalizar_texto(texto):
     """
@@ -317,50 +349,49 @@ nombres_hojas_normalizados = filtrar_sheets_con_A(nombres_hojas)
 for sheet in nombres_hojas_normalizados:
 
     df = pd.read_excel(file_path, sheet_name=sheet, header=None, dtype=str)
-    #df = eliminar_nulas(df)
+    table_widht = df.shape[1]
+
     titulo_carpeta = get_value_from_position(df, 5, 1)
     titulo_carpeta_normalizado = normalizar_texto(titulo_carpeta)
-    table_widht = obtener_numero_columnas(df)
     crear_carpeta(f"archivos-normalizados/{titulo_carpeta_normalizado}/")
-    
-    #Inicializamos los valores
+
+    #Valor de inicio
     start_row = 7
-    resultado = ["x", 1]
-    while resultado[1] != 0:
-        #print("holamundo")
+    resultado = ["x", 1, False]
+
+    while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
         resultado = obtener_texto_y_filas_hasta_seccion(df, 1, start_row)
-        if resultado[1] != 0:
+        #print(resultado[2])
+        if resultado[1] != 0 or resultado[2] == True:   # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
             titulo = get_value_from_position(df, (start_row - 1), 1)
             titulo_normalizado = normalizar_texto(titulo)
-            #titulo_normalizado = normalizar_texto(titulo)
-            #print(resultado)
+            #print(start_row, (start_row + resultado[1] - 1))
+            #print((table_widht-1))
+            if resultado[2] == False:   #Es el titulo de una sub Seccion? (False)
+                print(titulo_normalizado)
+                tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), (table_widht-1)) #agarra el tamaño total de columnas y le resta 1
+                row_COL,col_COL = find_first_occurrence(tabla, "COL1")
+                last_col = find_last_col_to_right(df, row_COL, col_COL ) #OCUPAR DF original para obtener las cordenadas absolutas
+                tabla = extract_rectangle(tabla, 0, 0, (resultado[1] - 1), last_col)
+                tabla_limpia2 = eliminar_nulas(tabla)
+                tabla_limpia2.to_excel(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx", index=False)
+            else: # (True)
+                crear_carpeta(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}")
+        
 
-            #print(resultado)
-            tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), (table_widht-1))
-            tabla_limpia2 = eliminar_nulas(tabla)
-            tabla.to_excel(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx", index=False)
-            #print(tabla_limpia)
-            #tabla_limpia2
             start_row += resultado[1] + 1
-# xls2 = pd.ExcelFile(last_file)
-# # Eliminar la última fila
-# xls2 = xls2.drop(df.index[-1])
+            #last_file = f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
+    #xls2 = pd.read_excel(last_file)
+    # Eliminar la última fila
+    #xls2 = xls2.drop(xls2.index[-1]))
 
 #%% MAIN testeo individual
 import math
 # Ejemplo de uso
-# Simulamos el DataFrame
 file_path = 'DICCIONARIO_SERIE_A_2009.xlsx'
-df = pd.read_excel(file_path, sheet_name='A09', header=None, dtype=str)
-#df = eliminar_nulas(df)
-#print(df)
-#print(df.shape[1])
-table_widht = obtener_numero_columnas(df)
+df = pd.read_excel(file_path, sheet_name='A01', header=None, dtype=str)
+table_widht = df.shape[1]
 
-row_COL,col_COL = find_first_occurrence(df, "COL1")
-#print(row_COL, col_COL)
-last_col = find_last_col_to_right(df, row_COL, col_COL )
-#print(last_col)
 
 titulo_carpeta = get_value_from_position(df, 5, 1)
 titulo_carpeta_normalizado = normalizar_texto(titulo_carpeta)
@@ -368,32 +399,32 @@ crear_carpeta(f"archivos-normalizados/{titulo_carpeta_normalizado}/")
 
 #Valor de inicio
 start_row = 7
-resultado = ["x", 1]
-abs_row = start_row
-while resultado[1] != 0:
-    #print("holamundo")
+resultado = ["x", 1, False]
+
+while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
     resultado = obtener_texto_y_filas_hasta_seccion(df, 1, start_row)
-    if resultado[1] != 0:
+    #print(resultado[2])
+    if resultado[1] != 0 or resultado[2] == True:   # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
         titulo = get_value_from_position(df, (start_row - 1), 1)
         titulo_normalizado = normalizar_texto(titulo)
+        #print(start_row, (start_row + resultado[1] - 1))
+        #print((table_widht-1))
+        if resultado[2] == False:   #Es el titulo de una sub Seccion? (False)
+            print(titulo_normalizado)
+            tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), (table_widht-1)) #agarra el tamaño total de columnas y le resta 1
+            row_COL,col_COL = find_first_occurrence(tabla, "COL1")
+            last_col = find_last_col_to_right(df, row_COL, col_COL ) #OCUPAR DF original para obtener las cordenadas absolutas
+            tabla = extract_rectangle(tabla, 0, 0, (resultado[1] - 1), last_col)
+            tabla_limpia2 = eliminar_nulas(tabla)
+            tabla_limpia2.to_excel(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx", index=False)
+        else: # (True)
+            crear_carpeta(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}")
+       
 
-        #print(resultado)
-        tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), 20)
-        #print(f"LARGO TABLA: {tabla.shape[0]}")
-        abs_row += tabla.shape[0]
-
-        row_COL,col_COL = find_first_occurrence(tabla, "COL1")
-        #print((row_COL), col_COL)
-        #print((row_COL - abs_row), col_COL)
-        last_col = find_last_col_to_right(df, row_COL, col_COL ) #OCUPAR DF original para obtener las cordenadas absolutas
-        #print(last_col)
-        #print(tabla.shape[1])
-        tabla = extract_rectangle(tabla, 0, 0, (resultado[1] - 1), last_col)
-        #print(tabla)
-        tabla_limpia2 = eliminar_nulas(tabla)
-        tabla.to_excel(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx", index=False)
-        #print(tabla_limpia2)
-        # tabla_limpia2
         start_row += resultado[1] + 1
+        #last_file = f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
+#xls2 = pd.read_excel(last_file)
+# Eliminar la última fila
+#xls2 = xls2.drop(xls2.index[-1])
 
 # %%
