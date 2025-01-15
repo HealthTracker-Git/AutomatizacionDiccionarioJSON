@@ -233,6 +233,79 @@ def obtener_numero_columnas(df):
     """
     return df.shape[1]
 
+
+
+# %% Encontrar un valor x
+
+def find_first_occurrence(df, target):
+    """
+    Busca la primera aparición de un string en un DataFrame y devuelve sus coordenadas.
+    
+    Parámetros:
+    df (pd.DataFrame): El DataFrame donde buscar.
+    target (str): El string que se desea buscar.
+    
+    Retorna:
+    tuple: Una tupla con las coordenadas (fila, columna) de la primera aparición.
+           Retorna None si el string no se encuentra.
+    """
+    for row_idx, row in df.iterrows():
+        for col_idx, value in row.items():
+            if value == target:
+                return (row_idx, col_idx)
+    return None
+
+# Ejemplo de uso
+file_path = 'DICCIONARIO_SERIE_A_2009.xlsx'
+df = pd.read_excel(file_path, sheet_name='A01', header=None)
+
+# Buscar el string 'manzana'
+resultado = find_first_occurrence(df, 'COL1')
+row_indx,col_indx  = resultado 
+print(f"Primera ocurrencia: {resultado}")  # Output: Primera ocurrencia: (0, 'A')
+valor = get_value_from_position(df, row_indx, col_indx)
+print(valor)
+
+# %% Obtener la ultima columna de una tabla
+def find_last_col_to_right(df, start_row, start_col):
+    """
+    Busca hacia la derecha desde una coordenada específica en un DataFrame y devuelve 
+    el número de la columna del último valor que comienza con 'COL'.
+    
+    Parámetros:
+    df (pd.DataFrame): El DataFrame donde buscar.
+    start_row (int): Índice de la fila desde donde comenzar.
+    start_col (int): Índice de la columna desde donde comenzar.
+    
+    Retorna:
+    int: Número de la columna del último valor que empieza con 'COL'. 
+         Si no se encuentra ningún valor válido, devuelve None.
+    """
+    #Verificar que la fila y columna inicial estén dentro del rango del DataFrame
+    if start_row < 0 or start_row >= df.shape[0] or start_col < 0 or start_col >= df.shape[1]:
+        raise ValueError("Coordenadas fuera de rango")
+    
+    # Inicializar el índice de la última columna válida
+    last_valid_col = None
+    
+    # Recorrer las columnas hacia la derecha desde la columna inicial
+    for col_idx in range(start_col, df.shape[1]):
+        value = str(df.iloc[start_row, col_idx])  # Obtener el valor como string
+        if value.startswith("COL"):
+            last_valid_col = col_idx  # Actualizar la última columna válida
+        else:
+            break  # Detener el proceso si el valor no comienza con 'COL'
+    
+    return last_valid_col
+
+# Ejemplo de uso
+file_path = 'DICCIONARIO_SERIE_A_2009.xlsx'
+df = pd.read_excel(file_path, sheet_name='A01', header=None)
+
+# Probar la función
+resultado = find_last_col_to_right(df, 9, 3)
+print(f"Última columna con 'COL': {resultado}")  # Output: Última columna con 'COL': 3
+
 #%% MAIN
 file_path = 'DICCIONARIO_SERIE_A_2009.xlsx'
 # Cargar el archivo Excel
@@ -278,32 +351,49 @@ import math
 # Ejemplo de uso
 # Simulamos el DataFrame
 file_path = 'DICCIONARIO_SERIE_A_2009.xlsx'
-df = pd.read_excel(file_path, sheet_name='A19', header=None, dtype=str)
+df = pd.read_excel(file_path, sheet_name='A09', header=None, dtype=str)
 #df = eliminar_nulas(df)
 #print(df)
+#print(df.shape[1])
 table_widht = obtener_numero_columnas(df)
+
+row_COL,col_COL = find_first_occurrence(df, "COL1")
+#print(row_COL, col_COL)
+last_col = find_last_col_to_right(df, row_COL, col_COL )
+#print(last_col)
+
 titulo_carpeta = get_value_from_position(df, 5, 1)
 titulo_carpeta_normalizado = normalizar_texto(titulo_carpeta)
 crear_carpeta(f"archivos-normalizados/{titulo_carpeta_normalizado}/")
-#print(titulo_carpeta_normalizado)
+
 #Valor de inicio
 start_row = 7
 resultado = ["x", 1]
+abs_row = start_row
 while resultado[1] != 0:
-    print("holamundo")
+    #print("holamundo")
     resultado = obtener_texto_y_filas_hasta_seccion(df, 1, start_row)
     if resultado[1] != 0:
         titulo = get_value_from_position(df, (start_row - 1), 1)
         titulo_normalizado = normalizar_texto(titulo)
-        #titulo_normalizado = normalizar_texto(titulo)
-        #print(resultado)
 
         #print(resultado)
         tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), 20)
+        #print(f"LARGO TABLA: {tabla.shape[0]}")
+        abs_row += tabla.shape[0]
+
+        row_COL,col_COL = find_first_occurrence(tabla, "COL1")
+        #print((row_COL), col_COL)
+        #print((row_COL - abs_row), col_COL)
+        last_col = find_last_col_to_right(df, row_COL, col_COL ) #OCUPAR DF original para obtener las cordenadas absolutas
+        #print(last_col)
+        #print(tabla.shape[1])
+        tabla = extract_rectangle(tabla, 0, 0, (resultado[1] - 1), last_col)
+        #print(tabla)
         tabla_limpia2 = eliminar_nulas(tabla)
         tabla.to_excel(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx", index=False)
-        #print(tabla_limpia)
-        tabla_limpia2
+        #print(tabla_limpia2)
+        # tabla_limpia2
         start_row += resultado[1] + 1
 
 # %%
