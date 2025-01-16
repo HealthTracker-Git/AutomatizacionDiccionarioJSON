@@ -265,6 +265,68 @@ def obtener_numero_columnas(df):
     """
     return df.shape[1]
 
+# %% Obtener todos los archivos Excel de una carpeta 
+def obtener_nombres_archivos_excel(ruta_carpeta):
+    """
+    Obtiene los nombres de todos los archivos .xlsx y .xlsm en una carpeta.
+
+    Args:
+        ruta_carpeta (str): Ruta de la carpeta donde buscar los archivos.
+
+    Returns:
+        list: Una lista con los nombres de los archivos encontrados (incluye extensión).
+    """
+    # Verificar si la ruta es válida
+    if not os.path.exists(ruta_carpeta):
+        raise FileNotFoundError(f"La ruta proporcionada no existe: {ruta_carpeta}")
+
+    # Filtrar los archivos con las extensiones deseadas
+    archivos_excel = [
+        archivo for archivo in os.listdir(ruta_carpeta)
+        if archivo.endswith(('.xlsx', '.xlsm'))
+    ]
+
+    return archivos_excel
+
+# Ejemplo de uso
+ruta = "Files/"
+archivos = obtener_nombres_archivos_excel(ruta)
+print(archivos)
+
+#%% Ultima fila de un texto
+def find_last_occurrence(df, text):
+    """
+    Encuentra la coordenada de la última fila en el DataFrame donde se encuentra el texto dado (insensible a mayúsculas/minúsculas).
+
+    Args:
+        df (pd.DataFrame): DataFrame donde buscar.
+        text (str): El texto que se desea buscar.
+
+    Returns:
+        tuple: Una tupla con (fila, columna) de la última ocurrencia del texto.
+              Si no se encuentra, devuelve (None, None).
+    """
+    last_row, last_col = None, None
+    text = text.lower() # Convertir el texto de búsqueda a minúsculas una sola vez
+
+    for row_idx in range(len(df)):
+        for col_idx in range(len(df.columns)):
+            value = df.iat[row_idx, col_idx]
+            if isinstance(value, str) and text in value.lower(): # Convertir el valor de la celda a minúsculas para la comparación
+                last_row, last_col = row_idx, col_idx
+
+    return (last_row, last_col)
+
+
+# Ejemplo de uso
+file_path = "Files/DICCIONARIO CODIGOS SA_23_V1.4.xlsm"
+
+df = pd.read_excel(file_path, sheet_name='A04', header=None, dtype=str)
+
+fila, columna = find_last_occurrence(df, 'COL01')
+print(f"Última ocurrencia de 'manzana': Fila {fila}, Columna {columna}")
+
+
 
 
 # %% Encontrar un valor x
@@ -279,13 +341,17 @@ def find_first_occurrence(df, target):
     
     Retorna:
     tuple: Una tupla con las coordenadas (fila, columna) de la primera aparición.
-           Retorna None si el string no se encuentra.
+           Retorna None si el string no se encuentra e imprime un mensaje de error.
     """
     for row_idx, row in df.iterrows():
         for col_idx, value in row.items():
             if value == target:
                 return (row_idx, col_idx)
+    
+    # Si no se encuentra el texto, imprimir un mensaje de error
+    #print(f"Error: No se encontró el texto '{target}' en la tabla.")
     return None
+
 
 # Ejemplo de uso
 file_path = 'DICCIONARIO_SERIE_A_2009.xlsx'
@@ -338,68 +404,259 @@ df = pd.read_excel(file_path, sheet_name='A01', header=None)
 resultado = find_last_col_to_right(df, 9, 3)
 print(f"Última columna con 'COL': {resultado}")  # Output: Última columna con 'COL': 3
 
-#%% MAIN
-file_path = 'DICCIONARIO_SERIE_A_2009.xlsx'
-# Cargar el archivo Excel
-xls = pd.ExcelFile(file_path)
+#%% primera coincidencia
+def buscar_primera_coincidencia(df, texto):
+    """
+    Busca la primera coincidencia de un texto en un DataFrame.
 
-# Obtener los nombres de todas las hojas (tablas)
-nombres_hojas = xls.sheet_names
-nombres_hojas_normalizados = filtrar_sheets_con_A(nombres_hojas)
-for sheet in nombres_hojas_normalizados:
+    Args:
+        df (pd.DataFrame): El DataFrame donde buscar.
+        texto (str): El texto a buscar.
 
-    df = pd.read_excel(file_path, sheet_name=sheet, header=None, dtype=str)
-    table_widht = df.shape[1]
+    Returns:
+        tuple or None: Una variable con la coordenada (fila) si se encuentra el texto,
+                       o None si no se encuentra.
+    """
+    for fila_idx, fila in df.iterrows():
+        for col_idx, valor in fila.items():
+            if isinstance(valor, str) and texto.lower() in valor.lower():
+                return fila_idx
+    return None
 
-    titulo_carpeta = get_value_from_position(df, 5, 1)
-    titulo_carpeta_normalizado = normalizar_texto(titulo_carpeta)
-    crear_carpeta(f"archivos-normalizados/{titulo_carpeta_normalizado}/")
+#%% Encontrar el titulo
+import re
+import unicodedata
 
-    #Valor de inicio
-    start_row = 7
-    resultado = ["x", 1, False]
+def remove_accents(input_str):
+    """
+    Elimina las tildes de un string dado.
+    
+    Parámetros:
+    input_str (str): El string del cual se eliminarán las tildes.
+    
+    Retorna:
+    str: El string sin tildes.
+    """
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', input_str)
+        if unicodedata.category(c) != 'Mn'
+    )
 
-    while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
-        resultado = obtener_texto_y_filas_hasta_seccion(df, 1, start_row)
-        #print(resultado[2])
-        if resultado[1] != 0 or resultado[2] == True:   # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
-            titulo = get_value_from_position(df, (start_row - 1), 1)
-            titulo_normalizado = normalizar_texto(titulo)
-            #print(start_row, (start_row + resultado[1] - 1))
-            #print((table_widht-1))
-            if resultado[2] == False:   #Es el titulo de una sub Seccion? (False)
-                print(titulo_normalizado)
-                tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), (table_widht-1)) #agarra el tamaño total de columnas y le resta 1
-                row_COL,col_COL = find_first_occurrence(tabla, "COL1")
-                last_col = find_last_col_to_right(df, row_COL, col_COL ) #OCUPAR DF original para obtener las cordenadas absolutas
-                tabla = extract_rectangle(tabla, 0, 0, (resultado[1] - 1), last_col)
-                tabla_limpia2 = eliminar_nulas(tabla)
-                tabla_limpia2.to_excel(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx", index=False)
-            else: # (True)
-                crear_carpeta(f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}")
+def titulo_finder(df, partial_title):
+    """
+    Busca la coordenada de la fila y columna donde se encuentra un título
+    que comienza con una parte específica, ignorando tildes y mayúsculas.
+    
+    Parámetros:
+    df (pd.DataFrame): El DataFrame donde buscar.
+    partial_title (str): La primera parte del título a buscar.
+    
+    Retorna:
+    tuple: Una tupla con las coordenadas (fila, columna) del título encontrado.
+           Retorna None si no se encuentra.
+    """
+    # Eliminar espacio y tildes del partial_title
+    #partial_title = partial_title.strip().lower()
+    partial_title_normalized = remove_accents(partial_title).lower().strip()
+    
+
+    for row_idx, row in df.iterrows():
+        for col_idx, value in row.items():
+            if isinstance(value, str):
+                # Eliminar tildes y convertir a minúsculas para comparar
+                value_normalized = remove_accents(value).lower().strip()
+                if value_normalized.startswith(partial_title_normalized):
+                    return (row_idx, col_idx)
+    
+    # Si no se encuentra el título
+    print(f"Error: No se encontró ningún título que comience con '{partial_title}' en la tabla.")
+    return None
+
+
+# Crear un ejemplo de DataFrame
+data = {
+    'Col1': ['RaM-A01: Detalle', 'Datos', 'REM-02: Informe'],
+    'Col2': ['Resumen', 'ram: Prestaciones y otros', 'N/A']
+}
+df = pd.DataFrame(data)
+
+# Buscar el título que empieza con 'REM'
+result = titulo_finder(df, " rém")
+print(result)  # Devuelve la coordenada de la primera coincidencia
+
+
+# %% ENCONTRAR ULTIMO COL1 / COL01
+import pandas as pd
+import re
+
+def encontrar_ultimo_col01(df):
+    """
+    Encuentra las coordenadas de la última ocurrencia de 'COL01' (y variantes como 'COL1', 'col01', etc.)
+    en el DataFrame utilizando expresiones regulares.
+    
+    Parameters:
+    df (pandas.DataFrame): DataFrame de entrada
+    
+    Returns:
+    tuple: (fila, columna) de la última ocurrencia de COL01
+           (-1, -1) si no se encuentra
+    """
+    ultima_fila = -1
+    ultima_columna = -1
+    # Expresión regular para encontrar cualquier variante de 'COL01'
+    patron = re.compile(r'col01', re.IGNORECASE)
+    
+    # Iteramos por todas las celdas del DataFrame
+    for fila in range(len(df)):
+        for columna in range(len(df.columns)):
+            # Convertimos el valor a string y comparamos con la expresión regular
+            valor = str(df.iloc[fila, columna]).strip()
+            if patron.match(valor):
+                # Actualizamos las coordenadas si encontramos una ocurrencia
+                # que está en una columna posterior o en la misma columna pero fila posterior
+                if (columna > ultima_columna or 
+                    (columna == ultima_columna and fila > ultima_fila)):
+                    ultima_fila = fila
+                    ultima_columna = columna
+    
+    return ultima_fila, ultima_columna
+
+# Example DataFrame
+path_file = "archivos-normalizados/REM-A30_AR-ATENCIÓN_Y_ORIENTACIÓN_DE_SALUD_A_DISTANCIA_HD/SECCION_H-ORIENTACIÓN_TELEFÓNICA_EN_SALUD.xlsx"
+seccion_h = pd.read_excel(path_file)
+
+# Para encontrar las coordenadas del último COL01
+fila, columna = encontrar_ultimo_col01(seccion_h)
+print(f"Último COL01 encontrado en: fila {fila}, columna {columna}")
+
+# Find furthest occurrence
+#row, col = find_furthest_col_coordinate(seccion_h, 'COL1')
+#print(f"Furthest COL1 found at: row {row}, column {col}")
+
+# Find all occurrences (for verification)
+#all_coords = find_all_coordinates(df, 'COL1')
+#print(f"All occurrences: {all_coords}")
+
+# path_file ="archivos-normalizados/REM-A30_AR-ATENCIÓN_Y_ORIENTACIÓN_DE_SALUD_A_DISTANCIA_HD/SECCION_H-ORIENTACIÓN_TELEFÓNICA_EN_SALUD.xlsx"
+# seccion_h = pd.read_excel(path_file)
+# coordenadas = find_highest_col(seccion_h, "col01")
+# print(coordenadas)
+# print(seccion_h.columns.tolist())
+
+#%% MAIN COMPLETO
+
+
+Archivos_SA_diccionarios = obtener_nombres_archivos_excel("FILES/")
+for DiccionarioAño in Archivos_SA_diccionarios:
+    
+    file_path = f"{DiccionarioAño}"
+    #crear_carpeta(DiccionarioAño)
+
+    #file_path = 'SA-2010_CODIGOS.xlsx'
+    nombre_carpeta_principal = file_path.rsplit('.', 1)[0]
+    direccion_principal_out = f"archivos-normalizados/{nombre_carpeta_principal}"
+    crear_carpeta(direccion_principal_out)
+    # Cargar el archivo Excel
+    xls = pd.ExcelFile(f"FILES/{DiccionarioAño}")
+
+    # Obtener los nombres de todas las hojas (tablas)
+    nombres_hojas = xls.sheet_names
+    nombres_hojas_normalizados = filtrar_sheets_con_A(nombres_hojas)
+    print(nombres_hojas_normalizados)
+    for sheet in nombres_hojas_normalizados:
+        print(sheet)
+        df = pd.read_excel(f"FILES/{DiccionarioAño}", sheet_name=sheet, header=None, dtype=str)
+        table_widht = df.shape[1]
+
         
+        titulo_row, titulo_col = titulo_finder(df, "REM")
+        titulo_carpeta = get_value_from_position(df, titulo_row, titulo_col)
+        titulo_carpeta_normalizado = normalizar_texto(titulo_carpeta)
+        crear_carpeta(f"archivos-normalizados/{nombre_carpeta_principal}/{titulo_carpeta_normalizado}/")
 
-            start_row += resultado[1] + 1
-            #last_file = f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
-    #xls2 = pd.read_excel(last_file)
-    # Eliminar la última fila
-    #xls2 = xls2.drop(xls2.index[-1]))
+        #Valor de inicio
+        start_row = buscar_primera_coincidencia(df, "SECCIÓN") + 1 
+        #print(start_row)
+        resultado = ["x", 1, False]
+
+        while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
+            resultado = obtener_texto_y_filas_hasta_seccion(df, 1, start_row)
+            #print(resultado[2])
+            if resultado[1] != 0 or resultado[2] == True:   # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
+                titulo = get_value_from_position(df, (start_row - 1), 1)
+                titulo_normalizado = normalizar_texto(titulo)
+                #print(start_row, (start_row + resultado[1] - 1))
+                #print((table_widht-1))
+                if resultado[2] == False:   #Es el titulo de una sub Seccion? (False)
+                    #print(titulo_normalizado)
+                    tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), (table_widht-1)) #agarra el tamaño total de columnas y le resta 1
+                    
+                    coordenadas = find_first_occurrence(tabla, "COL1")
+                    if coordenadas is None:
+                        # Intentar con "COL01" si no se encontró "COL1"
+                        coordenadas = find_first_occurrence(tabla, "COL01")
+
+                    if coordenadas is not None:
+                        row_COL, col_COL = coordenadas
+                        #print(f"Coordenadas encontradas: fila {row_COL}, columna {col_COL}")
+                    else:
+                        print("No se encontró ninguna coincidencia para COL1 o COL01")
+
+                    last_col = find_last_col_to_right(df, row_COL, col_COL ) #OCUPAR DF original para obtener las cordenadas absolutas
+                    tabla = extract_rectangle(tabla, 0, 0, (resultado[1] - 1), last_col)
+                    tabla_limpia2 = eliminar_nulas(tabla)
+                    tabla_limpia2.to_excel(f"{direccion_principal_out}/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx", index=False)
+                else: # (True)
+                    #crear_carpeta(f"{direccion_principal_out}/{titulo_carpeta_normalizado}/{titulo_normalizado}")
+                    print(" ")
+            
+
+                start_row += resultado[1] + 1
+                last_file = f"{direccion_principal_out}/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
+        last_file_df = pd.read_excel(last_file)
+        output_file = last_file
+
+        coordenadas = encontrar_ultimo_col01(last_file_df) # Busca coordenadas de "col1", "COL1", "Col1", etc.
+
+        if coordenadas != (None, None):
+            row_COL, col_COL = coordenadas
+            last_file_df = last_file_df.iloc[:row_COL + 1]
+            try:
+                last_file_df.to_excel(output_file, index=False)
+                #print(f"Archivo guardado en {output_file}")
+            except Exception as e:
+                print(f"Error al guardar el archivo: {e}")
+        else:
+            print("No se encontró ninguna coincidencia para 'COL1' o 'COL01'.")
 
 #%% MAIN testeo individual
 import math
-# Ejemplo de uso
-file_path = 'DICCIONARIO_SERIE_A_2009.xlsx'
-df = pd.read_excel(file_path, sheet_name='A01', header=None, dtype=str)
+# # Ejemplo de uso
+file_path = "FILES/SA_22_V1.1-CODIGOS.xlsx"
+
+df = pd.read_excel(file_path, sheet_name='A32', header=None, dtype=str)
 table_widht = df.shape[1]
 
 
-titulo_carpeta = get_value_from_position(df, 5, 1)
+# titulo_carpeta = get_value_from_position(df, 5, 1)
+#titulo_carpeta_normalizado = normalizar_texto(titulo_carpeta)
+# valocococo = get_value_from_position(df, 5, 1)
+# valocococo = valocococo.strip()
+# print(valocococo)
+titulo_row, titulo_col = titulo_finder(df, "REM")
+titulo_carpeta = get_value_from_position(df, titulo_row, titulo_col)
 titulo_carpeta_normalizado = normalizar_texto(titulo_carpeta)
 crear_carpeta(f"archivos-normalizados/{titulo_carpeta_normalizado}/")
 
 #Valor de inicio
-start_row = 7
+start_row, start_col = titulo_finder(df, "SECCIÓN") 
+start_row += 1 
+#print(start_row)
 resultado = ["x", 1, False]
+
+#row, col = find_first_occurrence(df, "COL01")
+#print(row, col)
+
 
 while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
     resultado = obtener_texto_y_filas_hasta_seccion(df, 1, start_row)
@@ -412,7 +669,18 @@ while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es
         if resultado[2] == False:   #Es el titulo de una sub Seccion? (False)
             print(titulo_normalizado)
             tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), (table_widht-1)) #agarra el tamaño total de columnas y le resta 1
-            row_COL,col_COL = find_first_occurrence(tabla, "COL1")
+            
+            coordenadas = find_first_occurrence(tabla, "COL1")
+            if coordenadas is None:
+                # Intentar con "COL01" si no se encontró "COL1"
+                coordenadas = find_first_occurrence(tabla, "COL01")
+
+            if coordenadas is not None:
+                row_COL, col_COL = coordenadas
+                #print(f"Coordenadas encontradas: fila {row_COL}, columna {col_COL}")
+            else:
+                print("No se encontró ninguna coincidencia para COL1 o COL01")
+
             last_col = find_last_col_to_right(df, row_COL, col_COL ) #OCUPAR DF original para obtener las cordenadas absolutas
             tabla = extract_rectangle(tabla, 0, 0, (resultado[1] - 1), last_col)
             tabla_limpia2 = eliminar_nulas(tabla)
@@ -422,9 +690,21 @@ while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es
        
 
         start_row += resultado[1] + 1
-        #last_file = f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
-#xls2 = pd.read_excel(last_file)
-# Eliminar la última fila
-#xls2 = xls2.drop(xls2.index[-1])
+        last_file = f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
+last_file_df = pd.read_excel(last_file)
+output_file = last_file
+
+coordenadas = encontrar_ultimo_col01(last_file_df) # Busca coordenadas de "col1", "COL1", "Col1", etc.
+
+if coordenadas != (None, None):
+    row_COL, col_COL = coordenadas
+    last_file_df = last_file_df.iloc[:row_COL + 1]
+    try:
+        last_file_df.to_excel(output_file, index=False)
+      #print(f"Archivo guardado en {output_file}")
+    except Exception as e:
+        print(f"Error al guardar el archivo: {e}")
+else:
+    print("No se encontró ninguna coincidencia para 'COL1' o 'COL01'.")
 
 # %%
