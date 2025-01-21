@@ -504,7 +504,7 @@ def encontrar_ultimo_col01(df):
     ultima_fila = -1
     ultima_columna = -1
     # Expresión regular para encontrar cualquier variante de 'COL01'
-    patron = re.compile(r'col01', re.IGNORECASE)
+    patron = re.compile(r'col0?1', re.IGNORECASE)
     
     # Iteramos por todas las celdas del DataFrame
     for fila in range(len(df)):
@@ -632,9 +632,9 @@ for DiccionarioAño in Archivos_SA_diccionarios:
 #%% MAIN testeo individual
 import math
 # # Ejemplo de uso
-file_path = "FILES/SA_22_V1.1-CODIGOS.xlsx"
+file_path = "FILES/DICCIONARIO_SERIE_A_2009.xlsx"
 
-df = pd.read_excel(file_path, sheet_name='A32', header=None, dtype=str)
+df = pd.read_excel(file_path, sheet_name='A06', header=None, dtype=str)
 table_widht = df.shape[1]
 
 
@@ -690,21 +690,89 @@ while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es
        
 
         start_row += resultado[1] + 1
-        last_file = f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
-last_file_df = pd.read_excel(last_file)
-output_file = last_file
+#         last_file = f"archivos-normalizados/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx"
+# last_file_df = pd.read_excel(last_file)
+# output_file = last_file
 
-coordenadas = encontrar_ultimo_col01(last_file_df) # Busca coordenadas de "col1", "COL1", "Col1", etc.
+# coordenadas = encontrar_ultimo_col01(last_file_df) # Busca coordenadas de "col1", "COL1", "Col1", etc.
 
-if coordenadas != (None, None):
-    row_COL, col_COL = coordenadas
-    last_file_df = last_file_df.iloc[:row_COL + 1]
-    try:
-        last_file_df.to_excel(output_file, index=False)
-      #print(f"Archivo guardado en {output_file}")
-    except Exception as e:
-        print(f"Error al guardar el archivo: {e}")
-else:
-    print("No se encontró ninguna coincidencia para 'COL1' o 'COL01'.")
+# if coordenadas != (None, None):
+#     row_COL, col_COL = coordenadas
+#     last_file_df = last_file_df.iloc[:row_COL + 1]
+#     try:
+#         last_file_df.to_excel(output_file, index=False)
+#       #print(f"Archivo guardado en {output_file}")
+#     except Exception as e:
+#         print(f"Error al guardar el archivo: {e}")
+# else:
+#     print("No se encontró ninguna coincidencia para 'COL1' o 'COL01'.")
 
+# %% MAIN SEMI-COmpleto (todas las hojas de un año)
+
+# Archivos_SA_diccionarios = obtener_nombres_archivos_excel("FILES/")
+# for DiccionarioAño in Archivos_SA_diccionarios:
+    
+#file_path = f"{DiccionarioAño}"
+#crear_carpeta(DiccionarioAño)
+
+file_path = 'SA-13_V1.3_CODIGOS.xlsx'
+nombre_carpeta_principal = file_path.rsplit('.', 1)[0]
+direccion_principal_out = f"archivos-normalizados/{nombre_carpeta_principal}"
+crear_carpeta(direccion_principal_out)
+# Cargar el archivo Excel
+xls = pd.ExcelFile(f"FILES/{file_path}")
+
+# Obtener los nombres de todas las hojas (tablas)
+nombres_hojas = xls.sheet_names
+nombres_hojas_normalizados = filtrar_sheets_con_A(nombres_hojas)
+print(nombres_hojas_normalizados)
+for sheet in nombres_hojas_normalizados:
+    print(sheet)
+    df = pd.read_excel(f"FILES/{file_path}", sheet_name=sheet, header=None, dtype=str)
+    table_widht = df.shape[1]
+
+    
+    titulo_row, titulo_col = titulo_finder(df, "REM")
+    titulo_carpeta = get_value_from_position(df, titulo_row, titulo_col)
+    titulo_carpeta_normalizado = normalizar_texto(titulo_carpeta)
+    crear_carpeta(f"archivos-normalizados/{nombre_carpeta_principal}/{titulo_carpeta_normalizado}/")
+
+    #Valor de inicio
+    start_row = buscar_primera_coincidencia(df, "SECCIÓN") + 1 
+    #print(start_row)
+    resultado = ["x", 1, False]
+
+    while resultado[1] != 0 or resultado[2] == True:    # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
+        resultado = obtener_texto_y_filas_hasta_seccion(df, 1, start_row)
+        #print(resultado[2])
+        if resultado[1] != 0 or resultado[2] == True:   # El largo de una columna es diferente de 0 o es el titulo de una sub seccion
+            titulo = get_value_from_position(df, (start_row - 1), 1)
+            titulo_normalizado = normalizar_texto(titulo)
+            #print(start_row, (start_row + resultado[1] - 1))
+            #print((table_widht-1))
+            if resultado[2] == False:   #Es el titulo de una sub Seccion? (False)
+                #print(titulo_normalizado)
+                tabla = extract_rectangle(df, start_row, 0, (start_row + resultado[1] - 1), (table_widht-1)) #agarra el tamaño total de columnas y le resta 1
+                
+                coordenadas = find_first_occurrence(tabla, "COL1")
+                if coordenadas is None:
+                    # Intentar con "COL01" si no se encontró "COL1"
+                    coordenadas = find_first_occurrence(tabla, "COL01")
+
+                if coordenadas is not None:
+                    row_COL, col_COL = coordenadas
+                    #print(f"Coordenadas encontradas: fila {row_COL}, columna {col_COL}")
+                else:
+                    print("No se encontró ninguna coincidencia para COL1 o COL01")
+
+                last_col = find_last_col_to_right(df, row_COL, col_COL ) #OCUPAR DF original para obtener las cordenadas absolutas
+                tabla = extract_rectangle(tabla, 0, 0, (resultado[1] - 1), last_col)
+                tabla_limpia2 = eliminar_nulas(tabla)
+                tabla_limpia2.to_excel(f"{direccion_principal_out}/{titulo_carpeta_normalizado}/{titulo_normalizado}.xlsx", index=False)
+            else: # (True)
+                #crear_carpeta(f"{direccion_principal_out}/{titulo_carpeta_normalizado}/{titulo_normalizado}")
+                print(" ")
+        
+
+            start_row += resultado[1] + 1
 # %%
